@@ -1,6 +1,6 @@
 import streamlit as st
-import pandas as pd
 import plotly.graph_objects as go
+
 from utils import (
     get_stock_data,
     get_stock_info,
@@ -8,69 +8,128 @@ from utils import (
     get_popular_stocks_snapshot
 )
 
+from auth import create_user_table, signup_user, login_user
+
 st.set_page_config(page_title="Stock Market Analyzer", layout="wide")
 
-# -----------------------------
-# Title
-# -----------------------------
-st.title("📈 Stock Market Data Analyzer")
-st.markdown("Analyze stock performance using real-time snapshots, historical charts, moving averages, and trend insights.")
+# Create user table
+create_user_table()
+
+# Session state initialization
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+if "user" not in st.session_state:
+    st.session_state.user = None
+
 
 # -----------------------------
-# Sidebar
+# AUTHENTICATION SECTION
 # -----------------------------
-st.sidebar.header("Stock Selection")
+def show_auth_page():
+    st.title("📈 StockVision")
+    st.markdown("### Smart Stock Analysis & Market Insights Dashboard")
+    st.subheader("Login / Signup")
 
-ticker = st.sidebar.text_input("Enter Stock Ticker", value="AAPL").upper()
+    auth_mode = st.radio("Select Option", ["Login", "Sign Up"], horizontal=True)
 
-timeframe_options = {
-    "1 Month": "1mo",
-    "3 Months": "3mo",
-    "6 Months": "6mo",
-    "1 Year": "1y",
-    "5 Years": "5y"
-}
-selected_timeframe = st.sidebar.selectbox("Select Timeframe", list(timeframe_options.keys()))
-period = timeframe_options[selected_timeframe]
+    if auth_mode == "Sign Up":
+        st.markdown("### Create a New Account")
+        username = st.text_input("Username")
+        email = st.text_input("Email")
+        password = st.text_input("Password", type="password")
+        confirm_password = st.text_input("Confirm Password", type="password")
 
-show_candlestick = st.sidebar.checkbox("Show Candlestick Chart", value=True)
-show_volume = st.sidebar.checkbox("Show Volume Chart", value=True)
-show_data = st.sidebar.checkbox("Show Raw Data", value=False)
+        if st.button("Create Account"):
+            if not username or not email or not password or not confirm_password:
+                st.warning("Please fill all fields.")
+            elif password != confirm_password:
+                st.error("Passwords do not match.")
+            else:
+                success, message = signup_user(username, email, password)
+                if success:
+                    st.success(message)
+                    st.info("Now go to Login and sign in with your account.")
+                else:
+                    st.error(message)
+
+    else:
+        st.markdown("### Login to Your Account")
+        email = st.text_input("Email")
+        password = st.text_input("Password", type="password")
+
+        if st.button("Login"):
+            success, result = login_user(email, password)
+            if success:
+                st.session_state.logged_in = True
+                st.session_state.user = result
+                st.success(f"Welcome, {result['username']}!")
+                st.rerun()
+            else:
+                st.error(result)
+
 
 # -----------------------------
-# Popular Stocks Dashboard
+# STOCK ANALYZER DASHBOARD
 # -----------------------------
-st.subheader("🔥 Popular Stocks Dashboard")
-popular_tickers = ["AAPL", "MSFT", "GOOGL", "TSLA", "NVDA", "AMZN"]
-popular_data = get_popular_stocks_snapshot(popular_tickers)
+def show_dashboard():
+    user = st.session_state.user
 
-if popular_data:
-    cols = st.columns(len(popular_data))
-    for i, stock in enumerate(popular_data):
-        with cols[i]:
-            st.metric(
-                label=stock["Ticker"],
-                value=f"${stock['Price']:.2f}" if stock["Price"] is not None else "N/A",
-                delta=f"{stock['Change']:.2f}%" if stock["Change"] is not None else None
-            )
-else:
-    st.info("Popular stocks snapshot could not be loaded at the moment.")
+    st.title("📈 StockVision")
+    st.markdown("### Smart Stock Analysis & Market Insights")
+    st.markdown(f"### Welcome, {user['username']} 👋")
 
-st.markdown("---")
+    # Logout button
+    if st.sidebar.button("Logout"):
+        st.session_state.logged_in = False
+        st.session_state.user = None
+        st.rerun()
 
-# -----------------------------
-# Main Stock Analysis
-# -----------------------------
-st.subheader(f"📊 Analysis for {ticker}")
+    st.sidebar.header("Stock Selection")
 
-# Fetch stock data
-df = get_stock_data(ticker, period)
-info = get_stock_info(ticker)
+    ticker = st.sidebar.text_input("Enter Stock Ticker", value="AAPL").upper()
 
-if df is None or df.empty:
-    st.error("No stock data found. Please enter a valid stock ticker.")
-else:
-    # Metrics row
+    timeframe_options = {
+        "1 Month": "1mo",
+        "3 Months": "3mo",
+        "6 Months": "6mo",
+        "1 Year": "1y",
+        "5 Years": "5y"
+    }
+    selected_timeframe = st.sidebar.selectbox("Select Timeframe", list(timeframe_options.keys()))
+    period = timeframe_options[selected_timeframe]
+
+    show_candlestick = st.sidebar.checkbox("Show Candlestick Chart", value=True)
+    show_volume = st.sidebar.checkbox("Show Volume Chart", value=True)
+    show_data = st.sidebar.checkbox("Show Raw Data", value=False)
+
+    # Popular Stocks Dashboard
+    st.subheader("🔥 Popular Stocks Dashboard")
+    popular_tickers = ["AAPL", "MSFT", "GOOGL", "TSLA", "NVDA", "AMZN"]
+    popular_data = get_popular_stocks_snapshot(popular_tickers)
+
+    if popular_data:
+        cols = st.columns(len(popular_data))
+        for i, stock in enumerate(popular_data):
+            with cols[i]:
+                st.metric(
+                    label=stock["Ticker"],
+                    value=f"${stock['Price']:.2f}" if stock["Price"] is not None else "N/A",
+                    delta=f"{stock['Change']:.2f}%" if stock["Change"] is not None else None
+                )
+    else:
+        st.info("Popular stocks snapshot could not be loaded at the moment.")
+
+    st.markdown("---")
+    st.subheader(f"📊 Analysis for {ticker}")
+
+    df = get_stock_data(ticker, period)
+    info = get_stock_info(ticker)
+
+    if df is None or df.empty:
+        st.error("No stock data found. Please enter a valid stock ticker.")
+        return
+
+    # Stock metrics
     if info:
         col1, col2, col3, col4 = st.columns(4)
 
@@ -87,26 +146,13 @@ else:
         with col3:
             st.metric("Day Low", f"${day_low:.2f}" if day_low else "N/A")
         with col4:
-            if market_cap:
-                st.metric("Market Cap", f"${market_cap:,.0f}")
-            else:
-                st.metric("Market Cap", "N/A")
-
-        col5, col6 = st.columns(2)
-        with col5:
-            st.metric("Volume", f"{volume:,.0f}" if volume else "N/A")
-        with col6:
-            previous_close = info.get("previousClose")
-            st.metric("Previous Close", f"${previous_close:.2f}" if previous_close else "N/A")
+            st.metric("Market Cap", f"${market_cap:,.0f}" if market_cap else "N/A")
 
     st.markdown("---")
 
-    # Calculate metrics
     metrics = calculate_metrics(df)
 
-    # -----------------------------
     # Trend Summary
-    # -----------------------------
     st.subheader("📌 Trend Summary")
     trend_color = "green" if metrics["trend"] == "Uptrend" else "red" if metrics["trend"] == "Downtrend" else "gray"
 
@@ -118,33 +164,12 @@ else:
 
     st.write(metrics["summary"])
 
-    # -----------------------------
-    # Line Chart with Moving Averages
-    # -----------------------------
+    # Closing Price + Moving Averages
     st.subheader("📈 Closing Price with Moving Averages")
     fig_line = go.Figure()
-
-    fig_line.add_trace(go.Scatter(
-        x=df.index,
-        y=df["Close"],
-        mode="lines",
-        name="Closing Price"
-    ))
-
-    fig_line.add_trace(go.Scatter(
-        x=df.index,
-        y=df["MA20"],
-        mode="lines",
-        name="20-Day MA"
-    ))
-
-    fig_line.add_trace(go.Scatter(
-        x=df.index,
-        y=df["MA50"],
-        mode="lines",
-        name="50-Day MA"
-    ))
-
+    fig_line.add_trace(go.Scatter(x=df.index, y=df["Close"], mode="lines", name="Closing Price"))
+    fig_line.add_trace(go.Scatter(x=df.index, y=df["MA20"], mode="lines", name="20-Day MA"))
+    fig_line.add_trace(go.Scatter(x=df.index, y=df["MA50"], mode="lines", name="50-Day MA"))
     fig_line.update_layout(
         xaxis_title="Date",
         yaxis_title="Price (USD)",
@@ -153,9 +178,7 @@ else:
     )
     st.plotly_chart(fig_line, use_container_width=True)
 
-    # -----------------------------
-    # Candlestick Chart
-    # -----------------------------
+    # Candlestick chart
     if show_candlestick:
         st.subheader("🕯️ Candlestick Chart")
         fig_candle = go.Figure(data=[go.Candlestick(
@@ -166,7 +189,6 @@ else:
             close=df["Close"],
             name="Candlestick"
         )])
-
         fig_candle.update_layout(
             xaxis_title="Date",
             yaxis_title="Price (USD)",
@@ -175,17 +197,11 @@ else:
         )
         st.plotly_chart(fig_candle, use_container_width=True)
 
-    # -----------------------------
-    # Volume Chart
-    # -----------------------------
+    # Volume chart
     if show_volume:
         st.subheader("📊 Trading Volume")
         fig_volume = go.Figure()
-        fig_volume.add_trace(go.Bar(
-            x=df.index,
-            y=df["Volume"],
-            name="Volume"
-        ))
+        fig_volume.add_trace(go.Bar(x=df.index, y=df["Volume"], name="Volume"))
         fig_volume.update_layout(
             xaxis_title="Date",
             yaxis_title="Volume",
@@ -194,9 +210,7 @@ else:
         )
         st.plotly_chart(fig_volume, use_container_width=True)
 
-    # -----------------------------
-    # Download Data
-    # -----------------------------
+    # Download CSV
     st.subheader("⬇️ Download Data")
     csv = df.to_csv().encode("utf-8")
     st.download_button(
@@ -206,12 +220,19 @@ else:
         mime="text/csv"
     )
 
-    # -----------------------------
-    # Raw Data
-    # -----------------------------
+    # Raw data
     if show_data:
         st.subheader("📄 Raw Historical Data")
         st.dataframe(df.tail(50))
 
-st.markdown("---")
-st.caption("Built using Python, Streamlit, Pandas, Plotly, and yfinance")
+    st.markdown("---")
+    st.caption("Built using Python, Streamlit, Pandas, Plotly, yfinance, and SQLite")
+
+
+# -----------------------------
+# MAIN APP FLOW
+# -----------------------------
+if st.session_state.logged_in:
+    show_dashboard()
+else:
+    show_auth_page()

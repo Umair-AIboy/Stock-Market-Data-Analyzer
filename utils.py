@@ -13,7 +13,6 @@ def get_stock_data(ticker, period="1y"):
         if df.empty:
             return None
 
-        # Keep only important columns
         df = df[["Open", "High", "Low", "Close", "Volume"]].copy()
 
         # Moving averages
@@ -76,7 +75,6 @@ def calculate_metrics(df):
 def get_popular_stocks_snapshot(tickers):
     """
     Fetch latest snapshot for popular stocks dashboard.
-    Returns a list of dicts: Ticker, Price, Change
     """
     result = []
 
